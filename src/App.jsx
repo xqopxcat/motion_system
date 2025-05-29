@@ -6,6 +6,7 @@ import { addLights, addFloor } from './scenes/lightsAndFloor'; // 假設有一�
 import { createBoneMeshes, createJointSpheres, calculateBoundingBox } from './scenes/createObject';
 import { makeTextSprite } from "./scenes/modules";
 import ControlPanel from "./components/ControlPanel";
+import ActionDataPanel from "./components/ActionDataPanel";
 
 
 function App() {
@@ -22,7 +23,25 @@ function App() {
     const speedRef = useRef(speed);
     const frameRef = useRef(frameNumber);
     const cameraRef = useRef(null);
+    const [joints, setJoints] = useState([]); // 用於存儲骨架關節
+    const [selectedJoint, setSelectedJoint] = useState('');
+    const [currentFrameData, setCurrentFrameData] = useState({
+        angle: 0,
+        centerX: 0,
+        centerY: 0,
+        centerZ: 0,
+        jointDistance: 0,
+    });
 
+    // 取得骨架所有 bone
+    function getAllBones(root) {
+        const arr = [];
+        root.traverse(b => {
+            if (b.isBone) arr.push(b);
+        });
+        return arr;
+    }
+    
     useEffect(() => {
         isPausedRef.current = isPaused;
     }, [isPaused]);
@@ -49,6 +68,10 @@ function App() {
             skeletonGroup.add(boneRoot);
             scene.add(skeletonGroup);
             
+            const boneList = getAllBones(boneRoot);
+            console.log(boneList);
+            setJoints(boneList.map(b => b.name));
+            setSelectedJoint(boneList[0]?.name || '');
             // boneRoot.updateMatrixWorld(true);
             let raycaster = new THREE.Raycaster();
             let mouse = new THREE.Vector2();
@@ -170,6 +193,28 @@ function App() {
                             return prev.filter((_, i) => i !== idx)
                         });
                     }}
+                    onAnnotationEdit={(idx, newText) => {
+                        setAnnotations(prev => prev.map((ann, i) => {
+                            if (i === idx) {
+                                // 1. 產生新的 sprite
+                                const newSprite = makeTextSprite(`${ann.info.frame} ${ann.bone?.name}: ${newText}`);
+                                // 2. 保持 sprite 位置不變
+                                newSprite.position.copy(ann.sprite.position);
+                                // 3. 用新 sprite 替換舊 sprite
+                                if (ann.sprite && ann.sprite.parent) {
+                                    ann.sprite.parent.add(newSprite);
+                                    ann.sprite.parent.remove(ann.sprite);
+                                }
+                                // 4. 回傳新的 annotation
+                                return {
+                                    ...ann,
+                                    sprite: newSprite,
+                                    info: { ...ann.info, text: newText }
+                                };
+                            }
+                            return ann;
+                        }));
+                    }}
                     frameNumber={frameNumber}
                     frameRef={frameRef}
                     mixerRef={mixerRef}
@@ -183,6 +228,15 @@ function App() {
                     setProgress={setProgress}
                 />
             )}
+            <ActionDataPanel
+                jointsList={joints}
+                selectedJoint={selectedJoint}
+                onJointChange={setSelectedJoint}
+                frameData={currentFrameData}
+                onFrameDataChange={(data) => {
+                    setCurrentFrameData(data);
+                }}
+            />
         </>
     )
 }

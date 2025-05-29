@@ -29,13 +29,17 @@
     padding: 4px 0;
 
     .annotation-text {
-      cursor: pointer;
-      color: #1976d2;
-      font-size: 15px;
-      transition: text-decoration 0.2s;
-      &:hover {
-        text-decoration: underline;
-      }
+        cursor: pointer;
+            color: #1976d2;
+            font-size: 15px;
+            transition: text-decoration 0.2s;
+            white-space: pre-wrap; // 保留換行並自動換行
+            word-break: break-word; // 單字太長時也會換行
+            display: block; // 讓 span 佔滿一行
+            max-width: 300px; // 可依需求調整最大寬度
+        &:hover {
+            text-decoration: underline;
+        }
     }
 
     .annotation-delete {
@@ -48,4 +52,19 @@
       padding: 0 4px;
     }
   }
+}
+
+.annotation-edit-input {
+  width: 70%;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid #bbb;
+  margin-right: 6px;
+}
+.annotation-edit, .annotation-save, .annotation-cancel {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  margin-left: 4px;
 }

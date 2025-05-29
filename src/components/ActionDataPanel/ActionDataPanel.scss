@@ -1,0 +1,27 @@
+.action-data-panel {
+    position: fixed;
+    top: 60px;
+    right: 0;
+    width: 320px;
+    background: #222;
+    color: #fff;
+    padding: 20px;
+    z-index: 1000;
+    border-radius: 8px 0 0 8px;
+    box-shadow: -2px 0 8px rgba(0,0,0,0.2);
+    .panel-title {
+        font-size: 1.2em;
+        margin-bottom: 12px;
+        font-weight: bold;
+    }
+    .joint-selector {
+        margin-bottom: 16px;
+    }
+    .data-row {
+        margin-bottom: 10px;
+        strong {
+            display: inline-block;
+            width: 140px;
+        }
+    }
+}

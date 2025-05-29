@@ -20,6 +20,7 @@ export default function ControlPanel(props) {
                 annotations={props.annotations}
                 onFocus={props.onAnnotationFocus}
                 onDelete={props.onAnnotationDelete}
+                onEdit={props.onAnnotationEdit}
             />
         </div>
     );
