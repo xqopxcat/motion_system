@@ -22,7 +22,6 @@ const FrameJumpInput = ({ value, mixerRef, setFrameNumber }) => {
                 max={totalFrames - 1}
                 onChange={e => {
                     let val = e.target.value;
-                    console.log(val, totalFrames)
                     if (isNaN(val)) val = 0;
                     if (val < 0) val = 0;
                     if (val > totalFrames - 1) val = totalFrames - 1;

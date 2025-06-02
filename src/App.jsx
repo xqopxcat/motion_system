@@ -18,13 +18,9 @@ function App() {
     const [isPaused, setIsPaused] = useState(true);
     const [frameStep, setFrameStep] = useState(false);
     const [isBVHLoaded, setIsBVHLoaded] = useState(false)
-    const mixerRef = useRef(null);
-    const isPausedRef = useRef(isPaused);
-    const speedRef = useRef(speed);
-    const frameRef = useRef(frameNumber);
-    const cameraRef = useRef(null);
     const [joints, setJoints] = useState([]); // 用於存儲骨架關節
     const [selectedJoint, setSelectedJoint] = useState('');
+    const [comparedJoint, setComparedJoint] = useState('');
     const [currentFrameData, setCurrentFrameData] = useState({
         angle: 0,
         centerX: 0,
@@ -32,6 +28,14 @@ function App() {
         centerZ: 0,
         jointDistance: 0,
     });
+    const mixerRef = useRef(null);
+    const isPausedRef = useRef(isPaused);
+    const speedRef = useRef(speed);
+    const frameRef = useRef(frameNumber);
+    const cameraRef = useRef(null);
+    const jointMapRef = useRef({});
+    const selectedJointRef = useRef('');
+    const comparedJointRef = useRef('');
 
     // 取得骨架所有 bone
     function getAllBones(root) {
@@ -45,6 +49,14 @@ function App() {
     useEffect(() => {
         isPausedRef.current = isPaused;
     }, [isPaused]);
+
+    useEffect(() => {
+        selectedJointRef.current = selectedJoint;
+    }, [selectedJoint]);
+
+    useEffect(() => {
+        comparedJointRef.current = comparedJoint;
+    }, [comparedJoint]);
     
     useEffect(() => {
         speedRef.current = speed;
@@ -69,9 +81,10 @@ function App() {
             scene.add(skeletonGroup);
             
             const boneList = getAllBones(boneRoot);
-            console.log(boneList);
             setJoints(boneList.map(b => b.name));
             setSelectedJoint(boneList[0]?.name || '');
+            setComparedJoint(boneList[1]?.name || '');
+            boneList.forEach(b => jointMapRef.current[b.name] = b);
             // boneRoot.updateMatrixWorld(true);
             let raycaster = new THREE.Raycaster();
             let mouse = new THREE.Vector2();
@@ -141,6 +154,10 @@ function App() {
                 speedRef,
                 onProgerss: setProgress,
                 onFrame: setFrameNumber,
+                jointMapRef,
+                selectedJointRef,
+                comparedJointRef,
+                onSetCurrentFrameData: setCurrentFrameData,
             });
             return () => {
                 renderer.domElement.removeEventListener('click', onClick);
@@ -231,7 +248,9 @@ function App() {
             <ActionDataPanel
                 jointsList={joints}
                 selectedJoint={selectedJoint}
+                comparedJoint={comparedJoint}
                 onJointChange={setSelectedJoint}
+                onComparedJointChange={setComparedJoint}
                 frameData={currentFrameData}
                 onFrameDataChange={(data) => {
                     setCurrentFrameData(data);
@@ -255,6 +274,10 @@ function animate({
     speedRef,
     onProgerss,
     onFrame,
+    jointMapRef,
+    selectedJointRef,
+    comparedJointRef,
+    onSetCurrentFrameData,
 }) {
     const clock = new THREE.Clock();
     function loop() {
@@ -294,6 +317,45 @@ function animate({
             const pos = bone.getWorldPosition(new THREE.Vector3());
             sphere.position.copy(pos);
         });
+
+        // 重心座標（用 Hips）
+        const hips = jointMapRef.current["Hips"];
+        if (hips) {
+            const pos = hips.getWorldPosition(new THREE.Vector3());
+            onSetCurrentFrameData(prev => ({
+                ...prev,
+                centerX: pos.x.toFixed(2),
+                centerY: pos.y.toFixed(2),
+                centerZ: pos.z.toFixed(2),
+            }));
+        }
+        
+
+        // 指定關節的角度
+        const sel = jointMapRef.current[selectedJointRef.current];
+        const compared = jointMapRef.current[comparedJointRef.current];
+        let angleDeg = 0;
+        let jointDistance = 0;
+        if (sel && sel.parent && sel.parent.isBone) {
+            // 用四元數 dot 取夾角（僅作展示）
+            const jointQuaternion = sel.quaternion;
+            const parentQuaternion = sel.parent.quaternion;
+            angleDeg = Math.acos(
+                2 * Math.pow(jointQuaternion.dot(parentQuaternion), 2) - 1
+            ) * (180 / Math.PI);
+            onSetCurrentFrameData(prev => ({
+                ...prev,
+                angle: angleDeg,
+            }));
+        }
+        // 相對關節距離
+        if (sel && compared) {
+            jointDistance = sel.getWorldPosition(new THREE.Vector3()).distanceTo(compared.getWorldPosition(new THREE.Vector3()));
+            onSetCurrentFrameData(prev => ({
+                ...prev,
+                jointDistance: jointDistance.toFixed(2),
+            }));
+        }
 
         renderer.render(scene, camera);
     }

@@ -8,7 +8,9 @@ const joints = [
 export default function ActionDataPanel({
     frameData, // 當前幀的數據
     onJointChange,
+    onComparedJointChange,
     selectedJoint,
+    comparedJoint,
     jointsList = joints
 }) {
     return (
@@ -20,14 +22,21 @@ export default function ActionDataPanel({
                     value={selectedJoint}
                     onChange={e => onJointChange(e.target.value)}
                 >
-                    {jointsList.map(j => (
-                        <option key={j} value={j}>{j}</option>
+                    {jointsList.map((joint, index) => (
+                        <option key={`${joint}-${index}`} value={joint}>{joint}</option>
                     ))}
                 </select>
             </div>
-            <div className="data-row">
-                <strong>{selectedJoint} Flexion：</strong>
-                <span>{frameData.angle}°</span>
+            <div className="joint-selector">
+                <label>相對關節：</label>
+                <select
+                    value={comparedJoint}
+                    onChange={e => onComparedJointChange(e.target.value)}
+                >
+                    {jointsList.map((joint, index) => (
+                        <option key={`${joint}-${index}`} value={joint}>{joint}</option>
+                    ))}
+                </select>
             </div>
             <div className="data-row">
                 <strong>重心座標：</strong>
@@ -38,7 +47,13 @@ export default function ActionDataPanel({
                 </span>
             </div>
             <div className="data-row">
-                <strong>關節對關節距離：</strong>
+                <strong>{selectedJoint} 屈曲：</strong>
+                <span>{frameData.angle}°</span>
+            </div>
+            <div className="data-row">
+                <strong className='distance' data-full-text={`${selectedJoint}對${comparedJoint}距離`}>
+                    {`${selectedJoint}對${comparedJoint}距離：`}
+                </strong>
                 <span>{frameData.jointDistance}</span>
             </div>
         </div>

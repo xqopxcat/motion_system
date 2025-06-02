@@ -2,7 +2,7 @@
     position: fixed;
     top: 60px;
     right: 0;
-    width: 320px;
+    width: 350px;
     background: #222;
     color: #fff;
     padding: 20px;
@@ -18,10 +18,29 @@
         margin-bottom: 16px;
     }
     .data-row {
+        display: flex;
+        align-items: baseline;
         margin-bottom: 10px;
         strong {
             display: inline-block;
-            width: 140px;
+            max-width: 100%;      
+            overflow: hidden;     
+            white-space: nowrap;  
+            text-overflow: ellipsis;
+            width: 160px;
+        }
+        .distance:hover::after {
+            content: attr(data-full-text); /* 顯示完整文字 */
+            position: absolute;
+            top: 100%; /* 顯示在元素下方 */
+            left: 0;
+            background: #333;
+            color: #fff;
+            padding: 4px 8px;
+            border-radius: 4px;
+            white-space: nowrap;
+            z-index: 10;
+            font-size: 12px;
         }
     }
 }
