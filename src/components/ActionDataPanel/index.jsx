@@ -17,7 +17,7 @@ export default function ActionDataPanel({
         <div className="action-data-panel">
             <div className="panel-title">動作數據</div>
             <div className="joint-selector">
-                <label>選擇關節：</label>
+                <label className="select-joint">選擇關節：</label>
                 <select
                     value={selectedJoint}
                     onChange={e => onJointChange(e.target.value)}
@@ -28,7 +28,7 @@ export default function ActionDataPanel({
                 </select>
             </div>
             <div className="joint-selector">
-                <label>相對關節：</label>
+                <label className="compared-joint">相對關節：</label>
                 <select
                     value={comparedJoint}
                     onChange={e => onComparedJointChange(e.target.value)}
@@ -47,8 +47,20 @@ export default function ActionDataPanel({
                 </span>
             </div>
             <div className="data-row">
-                <strong>{selectedJoint} 屈曲：</strong>
+                <strong className='distance' data-full-text={`${selectedJoint}對${comparedJoint}夾角`}>
+                    {`${selectedJoint}對${comparedJoint}夾角`}
+                </strong>
                 <span>{frameData.angle}°</span>
+            </div>
+            <div className="data-row">
+                <strong className='distance' data-full-text={`${selectedJoint}對${comparedJoint}分量夾角`}>
+                    {`${selectedJoint}對${comparedJoint}分量夾角`}
+                </strong>
+                <span>
+                    X: {frameData.angleX}&nbsp;
+                    Y: {frameData.angleY}&nbsp;
+                    Z: {frameData.angleZ}
+                </span>
             </div>
             <div className="data-row">
                 <strong className='distance' data-full-text={`${selectedJoint}對${comparedJoint}距離`}>

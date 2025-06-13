@@ -1,28 +1,45 @@
 import { useEffect, useState, useRef } from 'react';
 import * as THREE from 'three';
-import { BVHLoader } from 'three/examples/jsm/loaders/BVHLoader';
-import { initScene, adjustCamera } from './scenes/init'; // 假設有一個 initScene 函數來初始化場景
+import { initScene } from './scenes/init'; // 假設有一個 initScene 函數來初始化場景
 import { addLights, addFloor } from './scenes/lightsAndFloor'; // 假設有一個模組來添加光源和地板
-import { createBoneMeshes, createJointSpheres, calculateBoundingBox } from './scenes/createObject';
 import { makeTextSprite } from "./scenes/modules";
 import ControlPanel from "./components/ControlPanel";
 import ActionDataPanel from "./components/ActionDataPanel";
+import { loadBVHAndInitSkeleton, loadFBXAndInitSkeleton } from "./scenes/loadFile";
 
+const boneMeshes = [];
+const jointSpheres = [];
+
+export function highlightSelectedJoint(jointSpheres, selectedJointName, comparedJointName) {
+    jointSpheres.forEach(({ bone, sphere }) => {
+        if (bone.name === selectedJointName) {
+            sphere.material.color.set(0x00ffff); // 主選擇關節：青色
+        } else if (bone.name === comparedJointName) {
+            sphere.material.color.set(0xffff00); // 比較關節：黃色
+        } else {
+            sphere.material.color.set(0xff0000); // 其他：紅色
+        }
+    });
+}
 
 function App() {
     const mountRef = useRef(null);
     const [annotations, setAnnotations] = useState([]);
-    const [speed, setSpeed] = useState(0.1);      // 控制播放速率
+    const [speed, setSpeed] = useState(0.5);      // 控制播放速率
     const [progress, setProgress] = useState(0);  // 控制播放進度條
     const [frameNumber, setFrameNumber] = useState(0);
     const [isPaused, setIsPaused] = useState(true);
     const [frameStep, setFrameStep] = useState(false);
     const [isBVHLoaded, setIsBVHLoaded] = useState(false)
+    const [isFBXLoaded, setIsFBXLoaded] = useState(false)
     const [joints, setJoints] = useState([]); // 用於存儲骨架關節
     const [selectedJoint, setSelectedJoint] = useState('');
     const [comparedJoint, setComparedJoint] = useState('');
     const [currentFrameData, setCurrentFrameData] = useState({
         angle: 0,
+        angleX: 0,
+        angleY: 0,
+        angleZ: 0,
         centerX: 0,
         centerY: 0,
         centerZ: 0,
@@ -36,15 +53,6 @@ function App() {
     const jointMapRef = useRef({});
     const selectedJointRef = useRef('');
     const comparedJointRef = useRef('');
-
-    // 取得骨架所有 bone
-    function getAllBones(root) {
-        const arr = [];
-        root.traverse(b => {
-            if (b.isBone) arr.push(b);
-        });
-        return arr;
-    }
     
     useEffect(() => {
         isPausedRef.current = isPaused;
@@ -73,96 +81,53 @@ function App() {
         addLights(scene);
         addFloor(scene);
 
-        const loader = new BVHLoader();
-        loader.load('/full_body_motion_sample.bvh', (result) => {
-            const boneRoot = result.skeleton.bones[0];
-            const skeletonGroup = new THREE.Group();
-            skeletonGroup.add(boneRoot);
-            scene.add(skeletonGroup);
-            
-            const boneList = getAllBones(boneRoot);
-            setJoints(boneList.map(b => b.name));
-            setSelectedJoint(boneList[0]?.name || '');
-            setComparedJoint(boneList[1]?.name || '');
-            boneList.forEach(b => jointMapRef.current[b.name] = b);
-            // boneRoot.updateMatrixWorld(true);
-            let raycaster = new THREE.Raycaster();
-            let mouse = new THREE.Vector2();
-            
-
-            // 建立骨架視覺物件
-            const boneMeshes = [];
-            const jointSpheres = [];
-            createBoneMeshes(boneRoot, boneMeshes, skeletonGroup);
-            createJointSpheres(boneRoot, jointSpheres, skeletonGroup);
-            
-            function onClick(event) {
-                const rect = renderer.domElement.getBoundingClientRect();
-                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-                mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-                raycaster.setFromCamera(mouse, camera);
-
-                const intersects = raycaster.intersectObjects(
-                    jointSpheres.map(j => j.sphere)
-                );
-                if (intersects.length > 0) {
-                    const sphere = intersects[0].object;
-                    const joint = jointSpheres.find(j => j.sphere === sphere);
-                    if (joint) {
-                        // 1. 新增姿勢標記球
-                        const marker = new THREE.Mesh(
-                            new THREE.SphereGeometry(1.2),
-                            new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-                        );
-                        marker.position.copy(joint.bone.getWorldPosition(new THREE.Vector3()));
-                        skeletonGroup.add(marker);
-
-                        // 2. 彈出輸入框加入註解
-                        const text = window.prompt('請輸入註解：');
-                        if (text) {
-                            const info = {
-                                frame: frameRef.current,
-                                text
-                            }
-                            const sprite = makeTextSprite(`${frameRef.current} ${joint.bone.name}: ${text}`);
-                            sprite.position.copy(joint.bone.getWorldPosition(new THREE.Vector3()));
-                            skeletonGroup.add(sprite);
-                            setAnnotations(prev => [
-                                ...prev,
-                                { bone: joint.bone, sprite, marker, info }
-                            ]);
-                        }
-                    }
-                }
-            }
-            renderer.domElement.addEventListener('click', onClick);
-            // 計算骨骼的邊界框和最低點
-            const { offset, center, size } = calculateBoundingBox(boneRoot);
-            skeletonGroup.position.y -= offset / 2;
-            adjustCamera(camera, center, size);
-        
-            // 動畫
-            const mixer = new THREE.AnimationMixer(boneRoot);
-            mixer.clipAction(result.clip).setEffectiveWeight(1.0).play();
-            mixerRef.current = mixer;
-            setIsBVHLoaded(true);
-            // 動畫循環
-            animate({
-                renderer, scene, camera, mixer,
-                boneMeshes, jointSpheres,
-                isPausedRef,
-                speedRef,
-                onProgerss: setProgress,
-                onFrame: setFrameNumber,
-                jointMapRef,
-                selectedJointRef,
-                comparedJointRef,
-                onSetCurrentFrameData: setCurrentFrameData,
-            });
-            return () => {
-                renderer.domElement.removeEventListener('click', onClick);
-            }
+        loadBVHAndInitSkeleton({
+            bvhUrl: '/pirouette.bvh',
+            scene,
+            camera,
+            renderer,
+            setJoints,
+            setSelectedJoint,
+            setComparedJoint,
+            boneMeshes,
+            jointSpheres,
+            jointMapRef,
+            setAnnotations,
+            setIsBVHLoaded,
+            setProgress,
+            setFrameNumber,
+            setCurrentFrameData,
+            mixerRef,
+            isPausedRef,
+            speedRef,
+            selectedJointRef,
+            comparedJointRef,
+            animate,
         });
+        // loadFBXAndInitSkeleton({
+        //     fbxUrl: '/Baseball_Pitcher_mixamo.fbx',
+        //     scene,
+        //     camera,
+        //     renderer,
+        //     setJoints,
+        //     setSelectedJoint,
+        //     setComparedJoint,
+        //     jointMapRef,
+        //     boneMeshes,
+        //     jointSpheres,
+        //     setAnnotations,
+        //     setIsFBXLoaded,
+        //     setProgress,
+        //     setFrameNumber,
+        //     setCurrentFrameData,
+        //     frameRef,
+        //     mixerRef,
+        //     isPausedRef,
+        //     speedRef,
+        //     selectedJointRef,
+        //     comparedJointRef,
+        //     animate,
+        // });
 
         // 處理視窗大小調整
         const handleResize = () => {
@@ -180,10 +145,13 @@ function App() {
     
     useEffect(() => {
         if (frameStep && mixerRef.current) {
-            mixerRef.current.update(1 / 30); // 假設 30fps
+            const action = mixerRef.current._actions[0];
+            const clip = action._clip;
+            const fps = 1 / clip.tracks[0].times[1] - clip.tracks[0].times[0] || 30;
+            mixerRef.current.update(1 / Math.floor(fps)); // 假設 30fps
             setFrameStep(false);
         }
-    }, [frameStep]);
+    }, [frameStep, frameNumber]);
     
     return (
         <>
@@ -249,8 +217,14 @@ function App() {
                 jointsList={joints}
                 selectedJoint={selectedJoint}
                 comparedJoint={comparedJoint}
-                onJointChange={setSelectedJoint}
-                onComparedJointChange={setComparedJoint}
+                onJointChange={jointName => {
+                    setSelectedJoint(jointName);
+                    highlightSelectedJoint(jointSpheres, jointName, comparedJoint);
+                }}
+                onComparedJointChange={jointName => {
+                    setComparedJoint(jointName);
+                    highlightSelectedJoint(jointSpheres, selectedJoint, jointName);
+                }}
                 frameData={currentFrameData}
                 onFrameDataChange={(data) => {
                     setCurrentFrameData(data);
@@ -298,7 +272,6 @@ function animate({
             const progress = Math.min(time / clip.duration, 1);
             if (onProgerss) onProgerss(progress);
         }
-
         // 更新骨架圓柱
         boneMeshes.forEach(({ bone, mesh }) => {
             const parentPosition = bone.parent.getWorldPosition(new THREE.Vector3());
@@ -319,7 +292,7 @@ function animate({
         });
 
         // 重心座標（用 Hips）
-        const hips = jointMapRef.current["Hips"];
+        const hips = jointMapRef.current["hip"] ||jointMapRef.current["Hips"] || jointMapRef.current["mixamorigHips"] || jointMapRef.current["mixamorig:Hips"];
         if (hips) {
             const pos = hips.getWorldPosition(new THREE.Vector3());
             onSetCurrentFrameData(prev => ({
@@ -336,16 +309,28 @@ function animate({
         const compared = jointMapRef.current[comparedJointRef.current];
         let angleDeg = 0;
         let jointDistance = 0;
-        if (sel && sel.parent && sel.parent.isBone) {
-            // 用四元數 dot 取夾角（僅作展示）
-            const jointQuaternion = sel.quaternion;
-            const parentQuaternion = sel.parent.quaternion;
-            angleDeg = Math.acos(
-                2 * Math.pow(jointQuaternion.dot(parentQuaternion), 2) - 1
-            ) * (180 / Math.PI);
+        if (sel && compared) {
+            // 取得兩個骨頭的世界旋轉
+            const selQuat = sel.getWorldQuaternion(new THREE.Quaternion());
+            const comparedQuat = compared.getWorldQuaternion(new THREE.Quaternion());
+            const relativeQuat = selQuat.clone().invert().multiply(comparedQuat);
+            // 轉成歐拉角（XYZ順序）
+            const relativeEuler = new THREE.Euler().setFromQuaternion(relativeQuat, 'XYZ');
+            // 取得每個軸向的角度（單位：度）
+            const angleX = THREE.MathUtils.radToDeg(relativeEuler.x);
+            const angleY = THREE.MathUtils.radToDeg(relativeEuler.y);
+            const angleZ = THREE.MathUtils.radToDeg(relativeEuler.z);
+            const angleRad = 2 * Math.acos(Math.min(Math.max(relativeQuat.w, -1), 1));
+            angleDeg = angleRad * (180 / Math.PI);
+            // angleDeg = Math.acos(
+            //     2 * Math.pow(selQuat.dot(comparedQuat), 2) - 1
+            // ) * (180 / Math.PI);
             onSetCurrentFrameData(prev => ({
                 ...prev,
-                angle: angleDeg,
+                angle: angleDeg.toFixed(2),
+                angleX: angleX.toFixed(2),
+                angleY: angleY.toFixed(2),
+                angleZ: angleZ.toFixed(2),
             }));
         }
         // 相對關節距離

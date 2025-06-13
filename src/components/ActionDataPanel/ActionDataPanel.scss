@@ -2,7 +2,7 @@
     position: fixed;
     top: 60px;
     right: 0;
-    width: 350px;
+    width: 420px;
     background: #222;
     color: #fff;
     padding: 20px;
@@ -16,6 +16,12 @@
     }
     .joint-selector {
         margin-bottom: 16px;
+        .select-joint {
+            color: #00FFFF;
+        }
+        .compared-joint {
+            color: #FFFF00;
+        }
     }
     .data-row {
         display: flex;
@@ -27,7 +33,7 @@
             overflow: hidden;     
             white-space: nowrap;  
             text-overflow: ellipsis;
-            width: 160px;
+            width: 200px;
         }
         .distance:hover::after {
             content: attr(data-full-text); /* 顯示完整文字 */
