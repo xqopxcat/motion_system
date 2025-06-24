@@ -29,4 +29,29 @@ export function addFloor(scene) {
 
     const axesHelper = new THREE.AxesHelper(100);
     scene.add(axesHelper);
+    
+    // 標示 X, Y, Z 軸
+    const createLabel = (text, color, position) => {
+        const canvas = document.createElement('canvas');
+        const size = 128;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.font = 'bold 64px Arial';
+        ctx.fillStyle = color;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(text, size / 2, size / 2);
+
+        const texture = new THREE.CanvasTexture(canvas);
+        const material = new THREE.SpriteMaterial({ map: texture, depthTest: false });
+        const sprite = new THREE.Sprite(material);
+        sprite.scale.set(30, 30, 1);
+        sprite.position.copy(position);
+        scene.add(sprite);
+    };
+
+    createLabel('X', '#ff5555', new THREE.Vector3(120, 0, 0));
+    createLabel('Y', '#55ff55', new THREE.Vector3(0, 120, 0));
+    createLabel('Z', '#5555ff', new THREE.Vector3(0, 0, 120));
 }

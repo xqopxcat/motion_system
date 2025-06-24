@@ -47,14 +47,14 @@ export default function ActionDataPanel({
                 </span>
             </div>
             <div className="data-row">
-                <strong className='distance' data-full-text={`${selectedJoint}對${comparedJoint}夾角`}>
-                    {`${selectedJoint}對${comparedJoint}夾角`}
+                <strong className='distance' data-full-text={`${selectedJoint}對${comparedJoint}的姿態差異角度`}>
+                    {`${selectedJoint}對${comparedJoint}的姿態差異角度`}
                 </strong>
                 <span>{frameData.angle}°</span>
             </div>
             <div className="data-row">
-                <strong className='distance' data-full-text={`${selectedJoint}對${comparedJoint}分量夾角`}>
-                    {`${selectedJoint}對${comparedJoint}分量夾角`}
+                <strong className='distance' data-full-text={`${selectedJoint}對${comparedJoint}的姿態差異分量`}>
+                    {`${selectedJoint}對${comparedJoint}的姿態差異分量`}
                 </strong>
                 <span>
                     X: {frameData.angleX}&nbsp;

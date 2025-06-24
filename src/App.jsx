@@ -138,6 +138,10 @@ function App() {
         window.addEventListener('resize', handleResize);
 
         return () => {
+            if (scene.userData.angleArrowHelper) {
+                scene.remove(scene.userData.angleArrowHelper);
+                scene.userData.angleArrowHelper = null;
+            }
             mount.removeChild(renderer.domElement);
             window.removeEventListener('resize', handleResize);
         };
@@ -313,13 +317,14 @@ function animate({
             // 取得兩個骨頭的世界旋轉
             const selQuat = sel.getWorldQuaternion(new THREE.Quaternion());
             const comparedQuat = compared.getWorldQuaternion(new THREE.Quaternion());
+            // 相對旋轉
             const relativeQuat = selQuat.clone().invert().multiply(comparedQuat);
             // 轉成歐拉角（XYZ順序）
             const relativeEuler = new THREE.Euler().setFromQuaternion(relativeQuat, 'XYZ');
             // 取得每個軸向的角度（單位：度）
-            const angleX = THREE.MathUtils.radToDeg(relativeEuler.x);
-            const angleY = THREE.MathUtils.radToDeg(relativeEuler.y);
-            const angleZ = THREE.MathUtils.radToDeg(relativeEuler.z);
+            const angleX = THREE.MathUtils.radToDeg(relativeEuler.x); // X軸（左右，Pitch）
+            const angleY = THREE.MathUtils.radToDeg(relativeEuler.y); // Y軸（上下，Yaw）
+            const angleZ = THREE.MathUtils.radToDeg(relativeEuler.z); // Z軸（扭轉，Roll）
             const angleRad = 2 * Math.acos(Math.min(Math.max(relativeQuat.w, -1), 1));
             angleDeg = angleRad * (180 / Math.PI);
             // angleDeg = Math.acos(
@@ -327,11 +332,53 @@ function animate({
             // ) * (180 / Math.PI);
             onSetCurrentFrameData(prev => ({
                 ...prev,
-                angle: angleDeg.toFixed(2),
-                angleX: angleX.toFixed(2),
-                angleY: angleY.toFixed(2),
-                angleZ: angleZ.toFixed(2),
+                angle: angleDeg.toFixed(2),   // 總體旋轉角度
+                angleX: angleX.toFixed(2),    // X軸（左右，Pitch）
+                angleY: angleY.toFixed(2),    // Y軸（上下，Yaw）
+                angleZ: angleZ.toFixed(2),    // Z軸（扭轉，Roll）
             }));
+            // 夾角方向視覺化
+            // 取得旋轉軸與角度
+            const axis = new THREE.Vector3(1, 0, 0); // 預設
+            let angle = 0;
+            relativeQuat.normalize();
+            angle = 2 * Math.acos(Math.min(Math.max(relativeQuat.w, -1), 1));
+            const s = Math.sqrt(1 - relativeQuat.w * relativeQuat.w);
+            if (s > 0.0001) {
+                axis.set(
+                    relativeQuat.x / s,
+                    relativeQuat.y / s,
+                    relativeQuat.z / s
+                );
+            }
+            // 箭頭起點設在 sel 關節
+            const start = sel.getWorldPosition(new THREE.Vector3());
+            // 箭頭長度與方向
+            const length = 40; // 可依需求調整
+            const dir = axis.clone().normalize();
+             // 只建立一次 ArrowHelper
+            if (!scene.userData.angleArrowHelper) {
+                scene.userData.angleArrowHelper = new THREE.ArrowHelper(
+                    dir, start, length, 0x00ff00, 10, 5
+                );
+                scene.add(scene.userData.angleArrowHelper);
+            } else {
+                const angleArrowHelper = scene.userData.angleArrowHelper;
+                if (angleArrowHelper && !scene.children.includes(angleArrowHelper)) {
+                    scene.add(angleArrowHelper);
+                }
+                angleArrowHelper.position.copy(start);
+                angleArrowHelper.setDirection(dir);
+                angleArrowHelper.setLength(length, 10, 5);
+                angleArrowHelper.setColor(0x00ff00);
+                angleArrowHelper.visible = angle > 0.01;
+            }
+        } else {
+            // 沒有選擇時移除箭頭
+            console.warn("Selected joint or compared joint not found.");
+            if (angleArrowHelper) {
+                angleArrowHelper.visible = false;
+            }
         }
         // 相對關節距離
         if (sel && compared) {
@@ -341,7 +388,6 @@ function animate({
                 jointDistance: jointDistance.toFixed(2),
             }));
         }
-
         renderer.render(scene, camera);
     }
 
