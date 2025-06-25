@@ -98,6 +98,7 @@ function App() {
             setFrameNumber,
             setCurrentFrameData,
             mixerRef,
+            frameRef,
             isPausedRef,
             speedRef,
             selectedJointRef,
