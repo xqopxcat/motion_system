@@ -24,6 +24,7 @@ export function highlightSelectedJoint(jointSpheres, selectedJointName, compared
 
 function App() {
     const mountRef = useRef(null);
+    const [showControlPanel, setShowControlPanel] = useState(true); // 新增
     const [showActionPanel, setShowActionPanel] = useState(true);
     const [annotations, setAnnotations] = useState([]);
     const [speed, setSpeed] = useState(0.5);      // 控制播放速率
@@ -172,6 +173,8 @@ function App() {
             <div ref={mountRef} style={{ width: '100vw', height: '100vh' }} />);
             {isBVHLoaded && (
                 <ControlPanel
+                    showControlPanel={ showControlPanel }
+                    onToggleControlPanel={() => setShowControlPanel(!showControlPanel)}
                     annotations={annotations}
                     onAnnotationFocus={ann => {
                         // 例如讓相機聚焦到 ann.bone

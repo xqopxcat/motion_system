@@ -29,7 +29,7 @@ export default function ActionDataPanel({
                     fontSize: 20,
                 }}
                 >
-                    {showActionPanel ? '✖' : '☰'}
+                    {showActionPanel ? '−' : '+'}
                 </button>
             </div>
             {
