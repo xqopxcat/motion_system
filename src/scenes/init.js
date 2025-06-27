@@ -7,7 +7,7 @@ export function initScene(mount) {
     scene.background = new THREE.Color(0x202020);
 
     const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 1000);
-    camera.position.set(0, 50, 150);
+    camera.position.set(0, 100, 300);
 
     const renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -24,6 +24,6 @@ export function initScene(mount) {
 
 // 調整相機位置
 export function adjustCamera(camera, center, size) {
-    camera.position.set(center.x, center.y + size.y * 1.5, center.z + 200);
+    camera.position.set(center.x, center.y + size.y * 1.5, center.z + 500);
     camera.lookAt(center);
 }

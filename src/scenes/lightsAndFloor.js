@@ -24,10 +24,10 @@ export function addFloor(scene) {
     floor.receiveShadow = true;
     scene.add(floor);
 
-    const grid = new THREE.GridHelper(400, 20);
+    const grid = new THREE.GridHelper(800, 40);
     scene.add(grid);
 
-    const axesHelper = new THREE.AxesHelper(100);
+    const axesHelper = new THREE.AxesHelper(200);
     scene.add(axesHelper);
     
     // 標示 X, Y, Z 軸
@@ -51,7 +51,7 @@ export function addFloor(scene) {
         scene.add(sprite);
     };
 
-    createLabel('X', '#ff5555', new THREE.Vector3(120, 0, 0));
-    createLabel('Y', '#55ff55', new THREE.Vector3(0, 120, 0));
-    createLabel('Z', '#5555ff', new THREE.Vector3(0, 0, 120));
+    createLabel('X', '#ff5555', new THREE.Vector3(240, 0, 0));
+    createLabel('Y', '#55ff55', new THREE.Vector3(0, 240, 0));
+    createLabel('Z', '#5555ff', new THREE.Vector3(0, 0, 240));
 }

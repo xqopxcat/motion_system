@@ -24,6 +24,7 @@ export function highlightSelectedJoint(jointSpheres, selectedJointName, compared
 
 function App() {
     const mountRef = useRef(null);
+    const [showActionPanel, setShowActionPanel] = useState(true);
     const [annotations, setAnnotations] = useState([]);
     const [speed, setSpeed] = useState(0.5);      // 控制播放速率
     const [progress, setProgress] = useState(0);  // 控制播放進度條
@@ -43,6 +44,9 @@ function App() {
         centerX: 0,
         centerY: 0,
         centerZ: 0,
+        centerMove: 0,
+        centerDirection: new THREE.Vector3(1, 0, 0), // 重心移動方向
+        inclination: 0,
         jointDistance: 0,
     });
     const mixerRef = useRef(null);
@@ -53,6 +57,8 @@ function App() {
     const jointMapRef = useRef({});
     const selectedJointRef = useRef('');
     const comparedJointRef = useRef('');
+    const hipsPositionsRef = useRef([]);
+
     
     useEffect(() => {
         isPausedRef.current = isPaused;
@@ -103,30 +109,33 @@ function App() {
             speedRef,
             selectedJointRef,
             comparedJointRef,
+            hipsPositionsRef,
             animate,
         });
+        
         // loadFBXAndInitSkeleton({
-        //     fbxUrl: '/Baseball_Pitcher_mixamo.fbx',
+        //     fbxUrl: '/Freehang_Climb.fbx',
         //     scene,
         //     camera,
         //     renderer,
         //     setJoints,
         //     setSelectedJoint,
         //     setComparedJoint,
-        //     jointMapRef,
         //     boneMeshes,
         //     jointSpheres,
+        //     jointMapRef,
         //     setAnnotations,
         //     setIsFBXLoaded,
         //     setProgress,
         //     setFrameNumber,
         //     setCurrentFrameData,
-        //     frameRef,
         //     mixerRef,
+        //     frameRef,
         //     isPausedRef,
         //     speedRef,
         //     selectedJointRef,
         //     comparedJointRef,
+        //     hipsPositionsRef,
         //     animate,
         // });
 
@@ -219,6 +228,8 @@ function App() {
                 />
             )}
             <ActionDataPanel
+                showActionPanel={showActionPanel}
+                onToggleActionPanel={() => setShowActionPanel(!showActionPanel)}
                 jointsList={joints}
                 selectedJoint={selectedJoint}
                 comparedJoint={comparedJoint}
@@ -256,6 +267,8 @@ function animate({
     jointMapRef,
     selectedJointRef,
     comparedJointRef,
+    hipsPositionsRef,
+    frameRef,
     onSetCurrentFrameData,
 }) {
     const clock = new THREE.Clock();
@@ -298,28 +311,88 @@ function animate({
 
         // 重心座標（用 Hips）
         const hips = jointMapRef.current["hip"] ||jointMapRef.current["Hips"] || jointMapRef.current["mixamorigHips"] || jointMapRef.current["mixamorig:Hips"];
+        const neck = jointMapRef.current["neck"] || jointMapRef.current["Neck"] || jointMapRef.current["mixamorigNeck"] || jointMapRef.current["mixamorig:Neck"];
         if (hips) {
-            const pos = hips.getWorldPosition(new THREE.Vector3());
+            const hipsPos = hips.getWorldPosition(new THREE.Vector3());
+            const neckPos = neck.getWorldPosition(new THREE.Vector3());
+            const axisDir = new THREE.Vector3().subVectors(neckPos, hipsPos).normalize();
+            const axisLength = hipsPos.distanceTo(neckPos);
+            const xAxis = new THREE.Vector3(1, 0, 0);
+            const inclination = axisDir.angleTo(xAxis) * 180 / Math.PI;
+            const nowFrame = Math.max(0, frameRef.current); // 當前幀
+            const prevFrame = Math.max(0, nowFrame - 1);
+
+            const nowHips = hipsPositionsRef.current[nowFrame];
+            const prevHips = hipsPositionsRef.current[prevFrame];
+            let moveDir = new THREE.Vector3();
+            let moveLength = 0;
+
+            if (nowHips && prevHips) {
+                moveDir = nowHips.clone().sub(prevHips);
+                moveLength = moveDir.length();
+            }
+            const dir = moveDir.length() > 0.001 ? moveDir.clone().normalize() : new THREE.Vector3(1, 0, 0); // 單位向量
+            const actualDir = dir.clone().multiplyScalar(moveLength); // 移動向量
+            // 用 ArrowHelper 標示重心運動軸心
+            if (!scene.userData.centerMoveArrow) {
+                scene.userData.centerMoveArrow = new THREE.ArrowHelper(
+                    dir,
+                    hipsPos,
+                    Math.max(moveLength * 10, 10), // 放大顯示
+                    0x00ff00,
+                    20,
+                    10
+                );
+                scene.add(scene.userData.centerMoveArrow);
+            } else {
+                const arrow = scene.userData.centerMoveArrow;
+                arrow.position.copy(hipsPos);
+                arrow.setDirection(dir);
+                arrow.setLength(Math.max(moveLength * 10, 10));
+                arrow.visible = moveLength > 0.001;
+            }
+
+            if (!scene.userData.bodyAxisArrow) {
+                scene.userData.bodyAxisArrow = new THREE.ArrowHelper(
+                    axisDir,
+                    hipsPos,
+                    axisLength,
+                    0x0000ff,
+                    20,
+                    10
+                );
+                scene.add(scene.userData.bodyAxisArrow);
+            } else {
+                const bodyAxisArrow = scene.userData.bodyAxisArrow;
+                bodyAxisArrow.position.copy(hipsPos);
+                bodyAxisArrow.setDirection(axisDir);
+                bodyAxisArrow.setLength(axisLength);
+                bodyAxisArrow.visible = true;
+            }
             onSetCurrentFrameData(prev => ({
                 ...prev,
-                centerX: pos.x.toFixed(2),
-                centerY: pos.y.toFixed(2),
-                centerZ: pos.z.toFixed(2),
+                centerX: hipsPos.x.toFixed(2),
+                centerY: hipsPos.y.toFixed(2),
+                centerZ: hipsPos.z.toFixed(2),
+                centerMove: moveLength.toFixed(2), // 重心移動距離
+                centerDirection: actualDir, // 重心移動方向
+                inclination: inclination.toFixed(2), // 重心對X軸的傾斜角度
             }));
         }
         
 
-        // 指定關節的角度
+        // 指定關節的姿態差異角度
         const sel = jointMapRef.current[selectedJointRef.current];
+        const parent = sel?.parent;
         const compared = jointMapRef.current[comparedJointRef.current];
         let angleDeg = 0;
         let jointDistance = 0;
-        if (sel && compared) {
+        if (sel && parent) {
             // 取得兩個骨頭的世界旋轉
             const selQuat = sel.getWorldQuaternion(new THREE.Quaternion());
-            const comparedQuat = compared.getWorldQuaternion(new THREE.Quaternion());
+            const parentQuat = parent.getWorldQuaternion(new THREE.Quaternion());
             // 相對旋轉
-            const relativeQuat = selQuat.clone().invert().multiply(comparedQuat);
+            const relativeQuat = selQuat.clone().invert().multiply(parentQuat);
             // 轉成歐拉角（XYZ順序）
             const relativeEuler = new THREE.Euler().setFromQuaternion(relativeQuat, 'XYZ');
             // 取得每個軸向的角度（單位：度）
@@ -340,46 +413,40 @@ function animate({
             }));
             // 夾角方向視覺化
             // 取得旋轉軸與角度
-            const axis = new THREE.Vector3(1, 0, 0); // 預設
-            let angle = 0;
-            relativeQuat.normalize();
-            angle = 2 * Math.acos(Math.min(Math.max(relativeQuat.w, -1), 1));
-            const s = Math.sqrt(1 - relativeQuat.w * relativeQuat.w);
-            if (s > 0.0001) {
-                axis.set(
-                    relativeQuat.x / s,
-                    relativeQuat.y / s,
-                    relativeQuat.z / s
-                );
-            }
-            // 箭頭起點設在 sel 關節
-            const start = sel.getWorldPosition(new THREE.Vector3());
-            // 箭頭長度與方向
-            const length = 40; // 可依需求調整
-            const dir = axis.clone().normalize();
-             // 只建立一次 ArrowHelper
-            if (!scene.userData.angleArrowHelper) {
-                scene.userData.angleArrowHelper = new THREE.ArrowHelper(
-                    dir, start, length, 0x00ff00, 10, 5
-                );
-                scene.add(scene.userData.angleArrowHelper);
-            } else {
-                const angleArrowHelper = scene.userData.angleArrowHelper;
-                if (angleArrowHelper && !scene.children.includes(angleArrowHelper)) {
-                    scene.add(angleArrowHelper);
-                }
-                angleArrowHelper.position.copy(start);
-                angleArrowHelper.setDirection(dir);
-                angleArrowHelper.setLength(length, 10, 5);
-                angleArrowHelper.setColor(0x00ff00);
-                angleArrowHelper.visible = angle > 0.01;
-            }
-        } else {
-            // 沒有選擇時移除箭頭
-            console.warn("Selected joint or compared joint not found.");
-            if (angleArrowHelper) {
-                angleArrowHelper.visible = false;
-            }
+            // const axis = new THREE.Vector3(1, 0, 0); // 預設
+            // let angle = 0;
+            // relativeQuat.normalize();
+            // angle = 2 * Math.acos(Math.min(Math.max(relativeQuat.w, -1), 1));
+            // const s = Math.sqrt(1 - relativeQuat.w * relativeQuat.w);
+            // if (s > 0.0001) {
+            //     axis.set(
+            //         relativeQuat.x / s,
+            //         relativeQuat.y / s,
+            //         relativeQuat.z / s
+            //     );
+            // }
+            // // 箭頭起點設在 sel 關節
+            // const start = sel.getWorldPosition(new THREE.Vector3());
+            // // 箭頭長度與方向
+            // const length = 40; // 可依需求調整
+            // const dir = axis.clone().normalize();
+            //  // 只建立一次 ArrowHelper
+            // if (!scene.userData.angleArrowHelper) {
+            //     scene.userData.angleArrowHelper = new THREE.ArrowHelper(
+            //         dir, start, length, 0x00ff00, 10, 5
+            //     );
+            //     scene.add(scene.userData.angleArrowHelper);
+            // } else {
+            //     const angleArrowHelper = scene.userData.angleArrowHelper;
+            //     if (angleArrowHelper && !scene.children.includes(angleArrowHelper)) {
+            //         scene.add(angleArrowHelper);
+            //     }
+            //     angleArrowHelper.position.copy(start);
+            //     angleArrowHelper.setDirection(dir);
+            //     angleArrowHelper.setLength(length, 10, 5);
+            //     angleArrowHelper.setColor(0x00ff00);
+            //     angleArrowHelper.visible = angle > 0.01;
+            // }
         }
         // 相對關節距離
         if (sel && compared) {

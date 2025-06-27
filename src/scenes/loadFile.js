@@ -28,6 +28,7 @@ export async function loadBVHAndInitSkeleton({
     speedRef,
     selectedJointRef,
     comparedJointRef,
+    hipsPositionsRef,
     animate,
 }) {
     return new Promise((resolve, reject) => {
@@ -62,6 +63,16 @@ export async function loadBVHAndInitSkeleton({
             mixer.clipAction(result.clip).setEffectiveWeight(1.0).play();
             mixerRef.current = mixer;
             setIsBVHLoaded(true);
+            
+            const hipsName = boneList.find(n => /hip/i.test(n.name))?.name || "Hips";
+            const frameTimes = result.clip.tracks[0].times; // 假設每個track都是同一個長度
+            for (let i = 0; i < frameTimes.length; i++) {
+                mixer.setTime(frameTimes[i]);
+                const hip = boneList.find(b => b.name === hipsName);
+                if (hip) {
+                    hipsPositionsRef.current[i] = hip.getWorldPosition(new THREE.Vector3());
+                }
+            }
 
             // 動畫循環
             animate({
@@ -74,6 +85,8 @@ export async function loadBVHAndInitSkeleton({
                 jointMapRef,
                 selectedJointRef,
                 comparedJointRef,
+                hipsPositionsRef,
+                frameRef,
                 onSetCurrentFrameData: setCurrentFrameData,
             });
 
@@ -111,6 +124,7 @@ export async function loadFBXAndInitSkeleton({
     speedRef,
     selectedJointRef,
     comparedJointRef,
+    hipsPositionsRef,
     animate,
 }) {
     return new Promise((resolve, reject) => {
@@ -125,10 +139,11 @@ export async function loadFBXAndInitSkeleton({
             setSelectedJoint(boneList[0]?.name || '');
             setComparedJoint(boneList[1]?.name || '');
             boneList.forEach(b => jointMapRef.current[b.name] = b);
+            createBoneMeshes(boneList[0], boneMeshes, object);
             createJointSpheres(boneList[0], jointSpheres, object);
             highlightSelectedJoint(jointSpheres, boneList[0]?.name, boneList[1]?.name);
             // // 將 FBX 加入場景
-            // console.log('FBX 加載完成', object);
+            console.log('FBX 加載完成', object, boneList[0]);
 
             renderer.domElement.addEventListener('click', (e) => onClick(e, renderer, camera, object, jointSpheres, setAnnotations, frameRef));
 
@@ -145,7 +160,16 @@ export async function loadFBXAndInitSkeleton({
                 mixerRef.current = mixer;
             }
             setIsFBXLoaded(true);
-
+            console.log(object.animations[0]);
+            const hipsName = boneList.find(n => /hip/i.test(n.name))?.name || "Hips";
+            const frameTimes = object.animations[0].tracks[0].times; // 假設每個track都是同一個長度
+            for (let i = 0; i < frameTimes.length; i++) {
+                mixer.setTime(frameTimes[i]);
+                const hip = boneList.find(b => b.name === hipsName);
+                if (hip) {
+                    hipsPositionsRef.current[i] = hip.getWorldPosition(new THREE.Vector3());
+                }
+            }
             // 動畫循環
             animate({
                 renderer, scene, camera, mixer,
@@ -157,6 +181,8 @@ export async function loadFBXAndInitSkeleton({
                 jointMapRef,
                 selectedJointRef,
                 comparedJointRef,
+                hipsPositionsRef,
+                frameRef,
                 onSetCurrentFrameData: setCurrentFrameData,
             });
 
@@ -179,7 +205,6 @@ function onClick(event, renderer, camera, object, jointSpheres, setAnnotations, 
     );
     const raycaster = new THREE.Raycaster();
     raycaster.setFromCamera(mouse, camera);
-
     const intersects = raycaster.intersectObjects(
         jointSpheres.map(j => j.sphere)
     );
@@ -187,13 +212,6 @@ function onClick(event, renderer, camera, object, jointSpheres, setAnnotations, 
         const sphere = intersects[0].object;
         const joint = jointSpheres.find(j => j.sphere === sphere);
         if (joint) {
-            const marker = new THREE.Mesh(
-                new THREE.SphereGeometry(1.5),
-                new THREE.MeshBasicMaterial({ color: 0x00ff00 })
-            );
-            marker.position.copy(joint.bone.getWorldPosition(new THREE.Vector3()));
-            object.add(marker);
-
             const text = window.prompt('請輸入註解：');
             if (text) {
                 const info = {
@@ -204,6 +222,12 @@ function onClick(event, renderer, camera, object, jointSpheres, setAnnotations, 
                 sprite.position.copy(joint.bone.getWorldPosition(new THREE.Vector3()));
                 sprite.position.y += 8; // 提高一些位置以避免與骨頭重疊
                 object.add(sprite);
+                const marker = new THREE.Mesh(
+                    new THREE.SphereGeometry(1.5),
+                    new THREE.MeshBasicMaterial({ color: 0x00ff00 })
+                );
+                marker.position.copy(joint.bone.getWorldPosition(new THREE.Vector3()));
+                object.add(marker);
                 setAnnotations(prev => [
                     ...prev,
                     { bone: joint.bone, sprite, marker, info }
