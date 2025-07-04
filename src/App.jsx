@@ -147,7 +147,7 @@ function App() {
 
         // Landmark 加載
         loadLandmarkAndInitSkeleton({
-            landmarkUrl: '/landmark_data.json',
+            landmarkUrl: '/landmark_data_with_heel.json',
             scene,
             camera,
             renderer,

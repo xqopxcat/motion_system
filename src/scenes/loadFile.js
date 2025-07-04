@@ -6,8 +6,8 @@ import { createBoneMeshes, createJointSpheres, calculateBoundingBox } from './cr
 import { makeTextSprite } from "./modules";
 import { highlightSelectedJoint } from "../App";
 
-// 您的 landmark_data.json 包含的 15 個關節點索引：[0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 31, 32]
-// 對應的連接關係（使用數組索引 0-14）
+// 您的 landmark_data.json 包含的 17 個關節點索引：[0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]
+// 對應的連接關係（使用數組索引 0-16）
 const POSE_CONNECTIONS = [
     // 身體軀幹框架
     [1, 2],   // left_shoulder(index 1) - right_shoulder(index 2)
@@ -26,12 +26,16 @@ const POSE_CONNECTIONS = [
     // 左腿
     [7, 9],   // left_hip(index 7) - left_knee(index 9)
     [9, 11],  // left_knee(index 9) - left_ankle(index 11)
-    [11, 13], // left_ankle(index 11) - left_foot_index(index 13)
+    [11, 13],  // left_ankle - left_heel
+    [11, 15],  // left_ankle - left_foot_index
+    [13, 15],  // left_heel - left_foot_index
     
     // 右腿
     [8, 10],  // right_hip(index 8) - right_knee(index 10)  
     [10, 12], // right_knee(index 10) - right_ankle(index 12)
-    [12, 14], // right_ankle(index 12) - right_foot_index(index 14)
+    [12, 14],  // right_ankle - right_heel
+    [12, 16],  // right_ankle - right_foot_index
+    [14, 16],  // right_heel - right_foot_index
     
     // 頭部到軀幹
     // [0, 1],   // nose(index 0) - left_shoulder(index 1)
@@ -53,8 +57,10 @@ const JOINT_NAMES = [
     'right_knee',     // index 10 (MediaPipe index 26)
     'left_ankle',     // index 11 (MediaPipe index 27)
     'right_ankle',    // index 12 (MediaPipe index 28)
-    'left_foot_index',// index 13 (MediaPipe index 31)
-    'right_foot_index'// index 14 (MediaPipe index 32)
+    'left_heel',      // index 13 (MediaPipe index 29)
+    'right_heel',     // index 14 (MediaPipe index 30)
+    'left_foot_index',// index 15 (MediaPipe index 31)
+    'right_foot_index'// index 16 (MediaPipe index 32)
 ];
 
 export async function loadBVHAndInitSkeleton({
