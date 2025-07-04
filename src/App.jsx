@@ -321,6 +321,8 @@ function animate({
     mixer,
     boneMeshes,
     jointSpheres,
+    centerHipSphere,
+    chestSphere,
     isPausedRef,
     speedRef,
     onProgerss,
@@ -404,10 +406,30 @@ function animate({
             sphere.position.copy(pos);
         });
 
+        // 更新 centerHip 球體位置
+        if (centerHipSphere && hipsPositionsRef.current && frameRef.current !== undefined) {
+            const currentFrame = frameRef.current;
+            const centerHipPos = hipsPositionsRef.current[currentFrame];
+            if (centerHipPos) {
+                centerHipSphere.position.copy(centerHipPos);
+                centerHipSphere.visible = true;
+            } else {
+                centerHipSphere.visible = false;
+            }
+        }
+
+        // 更新 chest 球體位置
+        if (chestSphere && jointMapRef.current['chest']) {
+            const chestBone = jointMapRef.current['chest'];
+            const chestPos = chestBone.getWorldPosition(new THREE.Vector3());
+            chestSphere.position.copy(chestPos);
+            chestSphere.visible = true;
+        }
+        
         // 重心座標（支援不同格式）
         const hips = jointMapRef.current["hip"] || jointMapRef.current["Hips"] || 
                     jointMapRef.current["mixamorigHips"] || jointMapRef.current["mixamorig:Hips"] ||
-                    jointMapRef.current["left_hip"]; // landmark 格式
+                    jointMapRef.current["center_hip"]; // landmark centerHip
         const neck = jointMapRef.current["neck"] || jointMapRef.current["Neck"] || 
                     jointMapRef.current["mixamorigNeck"] || jointMapRef.current["mixamorig:Neck"] ||
                     jointMapRef.current["nose"]; // landmark 格式（用 nose 代替 neck）

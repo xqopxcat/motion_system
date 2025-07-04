@@ -34,8 +34,8 @@ const POSE_CONNECTIONS = [
     [12, 14], // right_ankle(index 12) - right_foot_index(index 14)
     
     // 頭部到軀幹
-    [0, 1],   // nose(index 0) - left_shoulder(index 1)
-    [0, 2],   // nose(index 0) - right_shoulder(index 2)
+    // [0, 1],   // nose(index 0) - left_shoulder(index 1)
+    // [0, 2],   // nose(index 0) - right_shoulder(index 2)
 ];
 
 // 15 個關節點名稱（按照您數據中的順序）
@@ -129,6 +129,8 @@ export async function loadBVHAndInitSkeleton({
             animate({
                 renderer, scene, camera, mixer,
                 boneMeshes, jointSpheres,
+                centerHipSphere: null, // BVH 不需要 centerHip
+                chestSphere: null, // BVH 不需要 chest
                 isPausedRef,
                 speedRef,
                 onProgerss: setProgress,
@@ -225,6 +227,8 @@ export async function loadFBXAndInitSkeleton({
             animate({
                 renderer, scene, camera, mixer,
                 boneMeshes, jointSpheres,
+                centerHipSphere: null, // FBX 不需要 centerHip
+                chestSphere: null, // FBX 不需要 chest
                 isPausedRef,
                 speedRef,
                 onProgerss: setProgress,
@@ -330,7 +334,59 @@ export async function loadLandmarkAndInitSkeleton({
                 // 創建視覺化
                 createLandmarkBoneMeshes(bones, POSE_CONNECTIONS, boneMeshes, skeletonGroup);
                 createLandmarkJointSpheres(bones, jointSpheres, skeletonGroup);
-                highlightSelectedJoint(jointSpheres, JOINT_NAMES[1], JOINT_NAMES[2]);
+                
+                // 創建 centerHip 可視化球體
+                const centerHipSphere = createCenterHipSphere(skeletonGroup);
+                
+                // 創建 chest 可視化球體
+                const chestSphere = createChestSphere(skeletonGroup);
+                
+                // 創建虛擬的 centerHip 骨骼並加入到 jointMapRef
+                const centerHipBone = new THREE.Bone();
+                centerHipBone.name = 'center_hip';
+                // 設置初始位置為 leftHip 和 rightHip 的中點
+                if (landmarkData.length > 0) {
+                    const firstFrame = landmarkData[0];
+                    const landmarks = firstFrame.landmarks3D || firstFrame.landmarks2D;
+                    const leftHip = landmarks[7];
+                    const rightHip = landmarks[8];
+                    if (leftHip && rightHip) {
+                        centerHipBone.position.set(
+                            (leftHip.x + rightHip.x) / 2 * 100,
+                            -(leftHip.y + rightHip.y) / 2 * 100,
+                            (leftHip.z + rightHip.z) / 2 * 100
+                        );
+                    }
+                }
+                skeletonGroup.add(centerHipBone);
+                jointMapRef.current['center_hip'] = centerHipBone;
+                
+                // 創建虛擬的 chest 骨骼並加入到 jointMapRef
+                const chestBone = new THREE.Bone();
+                chestBone.name = 'chest';
+                // 設置初始位置為 leftShoulder 和 rightShoulder 的中點
+                if (landmarkData.length > 0) {
+                    const firstFrame = landmarkData[0];
+                    const landmarks = firstFrame.landmarks3D || firstFrame.landmarks2D;
+                    const leftShoulder = landmarks[1];
+                    const rightShoulder = landmarks[2];
+                    if (leftShoulder && rightShoulder) {
+                        chestBone.position.set(
+                            (leftShoulder.x + rightShoulder.x) / 2 * 100,
+                            -(leftShoulder.y + rightShoulder.y) / 2 * 100,
+                            (leftShoulder.z + rightShoulder.z) / 2 * 100
+                        );
+                    }
+                }
+                skeletonGroup.add(chestBone);
+                jointMapRef.current['chest'] = chestBone;
+                
+                // 創建 nose 到 chest 的連線
+                createNoseToChestConnection(bones[0], chestBone, boneMeshes, skeletonGroup);
+                
+                // 更新關節列表，加入 center_hip 和 chest
+                const updatedJointNames = [...JOINT_NAMES, 'center_hip', 'chest'];
+                setJoints(updatedJointNames);
                 
                 // 點擊事件
                 renderer.domElement.addEventListener('click', e => 
@@ -338,7 +394,7 @@ export async function loadLandmarkAndInitSkeleton({
                 );
                 
                 // 創建自定義動畫系統
-                const landmarkMixer = createLandmarkAnimationMixer(bones, landmarkData);
+                const landmarkMixer = createLandmarkAnimationMixer(bones, landmarkData, centerHipBone, chestBone);
                 mixerRef.current = landmarkMixer;
                 setIsLandmarkLoaded(true);
                 
@@ -362,6 +418,8 @@ export async function loadLandmarkAndInitSkeleton({
                     renderer, scene, camera, 
                     mixer: landmarkMixer,
                     boneMeshes, jointSpheres,
+                    centerHipSphere,
+                    chestSphere,
                     isPausedRef, speedRef,
                     onProgerss: setProgress,
                     onFrame: setFrameNumber,
@@ -378,6 +436,8 @@ export async function loadLandmarkAndInitSkeleton({
                     bones,
                     boneMeshes,
                     jointSpheres,
+                    centerHipSphere,
+                    chestSphere,
                     mixer: landmarkMixer,
                     landmarkData
                 });
@@ -441,8 +501,36 @@ function updateBonePositions(bones, landmarks) {
     });
 }
 
+// 更新 centerHip 骨骼位置
+function updateCenterHipBone(centerHipBone, landmarks) {
+    const leftHip = landmarks[7];  // left_hip (index 7)
+    const rightHip = landmarks[8]; // right_hip (index 8)
+    
+    if (leftHip && rightHip) {
+        centerHipBone.position.set(
+            (leftHip.x + rightHip.x) / 2 * 100, // 放大 + 平均
+            -(leftHip.y + rightHip.y) / 2 * 100, // Y軸翻轉 + 放大 + 平均
+            (leftHip.z + rightHip.z) / 2 * 100  // 放大 + 平均
+        );
+    }
+}
+
+// 更新 chest 骨骼位置
+function updateChestBone(chestBone, landmarks) {
+    const leftShoulder = landmarks[1];  // left_shoulder (index 1)
+    const rightShoulder = landmarks[2]; // right_shoulder (index 2)
+    
+    if (leftShoulder && rightShoulder) {
+        chestBone.position.set(
+            (leftShoulder.x + rightShoulder.x) / 2 * 100, // 放大 + 平均
+            -(leftShoulder.y + rightShoulder.y) / 2 * 100, // Y軸翻轉 + 放大 + 平均
+            (leftShoulder.z + rightShoulder.z) / 2 * 100  // 放大 + 平均
+        );
+    }
+}
+
 // 創建 Landmark 專用的動畫混合器
-function createLandmarkAnimationMixer(bones, landmarkData) {
+function createLandmarkAnimationMixer(bones, landmarkData, centerHipBone, chestBone) {
     let currentFrame = 0;
     const totalFrames = landmarkData.length;
     const fps = 30; // 假設 30fps
@@ -451,6 +539,8 @@ function createLandmarkAnimationMixer(bones, landmarkData) {
         _isLandmarkMixer: true,
         _bones: bones,
         _landmarkData: landmarkData,
+        _centerHipBone: centerHipBone,
+        _chestBone: chestBone,
         _currentFrame: currentFrame,
         _totalFrames: totalFrames,
         time: 0,
@@ -464,6 +554,14 @@ function createLandmarkAnimationMixer(bones, landmarkData) {
                 const frameData = this._landmarkData[targetFrame];
                 if (frameData) {
                     updateBonePositions(this._bones, frameData.landmarks3D || frameData.landmarks2D);
+                    // 更新 centerHip 骨骼位置
+                    if (this._centerHipBone) {
+                        updateCenterHipBone(this._centerHipBone, frameData.landmarks3D || frameData.landmarks2D);
+                    }
+                    // 更新 chest 骨骼位置
+                    if (this._chestBone) {
+                        updateChestBone(this._chestBone, frameData.landmarks3D || frameData.landmarks2D);
+                    }
                 }
             }
         },
@@ -475,6 +573,14 @@ function createLandmarkAnimationMixer(bones, landmarkData) {
             const frameData = this._landmarkData[targetFrame];
             if (frameData) {
                 updateBonePositions(this._bones, frameData.landmarks3D || frameData.landmarks2D);
+                // 更新 centerHip 骨骼位置
+                if (this._centerHipBone) {
+                    updateCenterHipBone(this._centerHipBone, frameData.landmarks3D || frameData.landmarks2D);
+                }
+                // 更新 chest 骨骼位置
+                if (this._chestBone) {
+                    updateChestBone(this._chestBone, frameData.landmarks3D || frameData.landmarks2D);
+                }
             }
         },
         
@@ -525,4 +631,48 @@ function createLandmarkJointSpheres(bones, jointSpheres, parent) {
         jointSpheres.push({ bone, sphere });
         parent.add(sphere);
     });
+}
+
+// 創建 centerHip 可視化球體
+function createCenterHipSphere(parent) {
+    const geometry = new THREE.SphereGeometry(2.5, 16, 16); // 比普通關節稍大
+    const material = new THREE.MeshBasicMaterial({ 
+        color: 0x00ffff,
+        transparent: true,
+        opacity: 0.8
+    });
+    const sphere = new THREE.Mesh(geometry, material);
+    sphere.name = 'centerHip';
+    parent.add(sphere);
+    return sphere;
+}
+
+// 創建 chest 可視化球體
+function createChestSphere(parent) {
+    const geometry = new THREE.SphereGeometry(2.5, 16, 16); // 比普通關節稍大
+    const material = new THREE.MeshBasicMaterial({ 
+        color: 0x00ffff, // 青色以區別於其他關節
+        transparent: true,
+        opacity: 0.8
+    });
+    const sphere = new THREE.Mesh(geometry, material);
+    sphere.name = 'chest';
+    parent.add(sphere);
+    return sphere;
+}
+
+// 創建 nose 到 chest 的連線
+function createNoseToChestConnection(noseBone, chestBone, boneMeshes, parent) {
+    const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
+    const material = new THREE.MeshBasicMaterial({ color: 0x00ff88 }); // 橙色以區別於其他連線
+    const mesh = new THREE.Mesh(geometry, material);
+    
+    boneMeshes.push({ 
+        bone: noseBone, 
+        endBone: chestBone,
+        mesh 
+    });
+    parent.add(mesh);
+    
+    console.log('創建 nose 到 chest 連線');
 }
