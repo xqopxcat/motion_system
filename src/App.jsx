@@ -5,7 +5,7 @@ import { addLights, addFloor } from './scenes/lightsAndFloor'; // 假設有一�
 import { makeTextSprite } from "./scenes/modules";
 import ControlPanel from "./components/ControlPanel";
 import ActionDataPanel from "./components/ActionDataPanel";
-import { loadBVHAndInitSkeleton, loadFBXAndInitSkeleton } from "./scenes/loadFile";
+import { loadBVHAndInitSkeleton, loadFBXAndInitSkeleton, loadLandmarkAndInitSkeleton } from "./scenes/loadFile";
 
 const boneMeshes = [];
 const jointSpheres = [];
@@ -25,15 +25,16 @@ export function highlightSelectedJoint(jointSpheres, selectedJointName, compared
 function App() {
     const mountRef = useRef(null);
     const [showControlPanel, setShowControlPanel] = useState(true); // 新增
-    const [showActionPanel, setShowActionPanel] = useState(true);
+    const [showActionPanel, setShowActionPanel] = useState(false);
     const [annotations, setAnnotations] = useState([]);
     const [speed, setSpeed] = useState(0.5);      // 控制播放速率
     const [progress, setProgress] = useState(0);  // 控制播放進度條
     const [frameNumber, setFrameNumber] = useState(0);
     const [isPaused, setIsPaused] = useState(true);
     const [frameStep, setFrameStep] = useState(false);
-    const [isBVHLoaded, setIsBVHLoaded] = useState(false)
+    const [isBVHLoaded, setIsBVHLoaded] = useState(true)
     const [isFBXLoaded, setIsFBXLoaded] = useState(false)
+    const [isLandmarkLoaded, setIsLandmarkLoaded] = useState(false)
     const [joints, setJoints] = useState([]); // 用於存儲骨架關節
     const [selectedJoint, setSelectedJoint] = useState('');
     const [comparedJoint, setComparedJoint] = useState('');
@@ -88,8 +89,65 @@ function App() {
         addLights(scene);
         addFloor(scene);
 
-        loadBVHAndInitSkeleton({
-            bvhUrl: '/pirouette.bvh',
+        // 選擇要加載的數據類型（三選一）
+        
+        // BVH 加載
+        // loadBVHAndInitSkeleton({
+        //     bvhUrl: '/pirouette.bvh',
+        //     scene,
+        //     camera,
+        //     renderer,
+        //     setJoints,
+        //     setSelectedJoint,
+        //     setComparedJoint,
+        //     boneMeshes,
+        //     jointSpheres,
+        //     jointMapRef,
+        //     setAnnotations,
+        //     setIsBVHLoaded,
+        //     setProgress,
+        //     setFrameNumber,
+        //     setCurrentFrameData,
+        //     mixerRef,
+        //     frameRef,
+        //     isPausedRef,
+        //     speedRef,
+        //     selectedJointRef,
+        //     comparedJointRef,
+        //     hipsPositionsRef,
+        //     animate,
+        // });
+        
+        // FBX 加載
+        // loadFBXAndInitSkeleton({
+        //     fbxUrl: '/Freehang_Climb.fbx',
+        //     scene,
+        //     camera,
+        //     renderer,
+        //     setJoints,
+        //     setSelectedJoint,
+        //     setComparedJoint,
+        //     boneMeshes,
+        //     jointSpheres,
+        //     jointMapRef,
+        //     setAnnotations,
+        //     setIsFBXLoaded,
+        //     setProgress,
+        //     setFrameNumber,
+        //     setCurrentFrameData,
+        //     mixerRef,
+        //     frameRef,
+        //     isPausedRef,
+        //     speedRef,
+        //     selectedJointRef,
+        //     comparedJointRef,
+        //     hipsPositionsRef,
+        //     animate,
+        // });
+
+        // Landmark 加載
+        loadLandmarkAndInitSkeleton({
+            landmarkUrl: '/landmark_data.json',
             scene,
             camera,
             renderer,
@@ -100,7 +158,7 @@ function App() {
             jointSpheres,
             jointMapRef,
             setAnnotations,
-            setIsBVHLoaded,
+            setIsLandmarkLoaded,
             setProgress,
             setFrameNumber,
             setCurrentFrameData,
@@ -171,7 +229,7 @@ function App() {
     return (
         <>
             <div ref={mountRef} style={{ width: '100vw', height: '100vh' }} />);
-            {isBVHLoaded && (
+            {(isBVHLoaded || isFBXLoaded || isLandmarkLoaded) && (
                 <ControlPanel
                     showControlPanel={ showControlPanel }
                     onToggleControlPanel={() => setShowControlPanel(!showControlPanel)}
@@ -287,24 +345,58 @@ function animate({
             const action = mixer._actions[0];
             const clip = action._clip;
             const time = action.time !== undefined ? action.time : mixer.time;
-            const fps = 1 / clip.tracks[0].times[1] - clip.tracks[0].times[0] || 30;
-            const frame = Math.floor(time * fps);
-            if (onFrame) onFrame(frame);
-            const progress = Math.min(time / clip.duration, 1);
-            if (onProgerss) onProgerss(progress);
+            let fps = 30; // 預設 fps
+            
+            if (mixer._isLandmarkMixer) {
+                // Landmark mixer 特殊處理
+                fps = 30;
+                const frame = mixer._currentFrame || 0;
+                if (onFrame) onFrame(frame);
+                const progress = Math.min(frame / (mixer._totalFrames - 1), 1);
+                if (onProgerss) onProgerss(progress);
+            } else {
+                // 標準 Three.js mixer
+                fps = 1 / clip.tracks[0].times[1] - clip.tracks[0].times[0] || 30;
+                const frame = Math.floor(time * fps);
+                if (onFrame) onFrame(frame);
+                const progress = Math.min(time / clip.duration, 1);
+                if (onProgerss) onProgerss(progress);
+            }
         }
+        
         // 更新骨架圓柱
-        boneMeshes.forEach(({ bone, mesh }) => {
-            const parentPosition = bone.parent.getWorldPosition(new THREE.Vector3());
-            const childPosition = bone.getWorldPosition(new THREE.Vector3());
-            const direction = new THREE.Vector3().subVectors(childPosition, parentPosition);
-            const length = direction.length();
-            mesh.position.copy(parentPosition.clone().add(direction.multiplyScalar(0.5)));
-            mesh.quaternion.setFromUnitVectors(
-                new THREE.Vector3(0, 1, 0),
-                direction.clone().normalize()
-            );
-            mesh.scale.set(1, length / mesh.geometry.parameters.height, 1);
+        boneMeshes.forEach(({ bone, mesh, endBone }) => {
+            if (endBone) {
+                // Landmark 骨架處理（有明確的起始和結束骨骼）
+                const startPosition = bone.getWorldPosition(new THREE.Vector3());
+                const endPosition = endBone.getWorldPosition(new THREE.Vector3());
+                const direction = new THREE.Vector3().subVectors(endPosition, startPosition);
+                const length = direction.length();
+                
+                if (length > 0.1) { // 避免長度太小
+                    mesh.position.copy(startPosition.clone().add(direction.multiplyScalar(0.5)));
+                    mesh.quaternion.setFromUnitVectors(
+                        new THREE.Vector3(0, 1, 0),
+                        direction.clone().normalize()
+                    );
+                    mesh.scale.set(1, length / mesh.geometry.parameters.height, 1);
+                    mesh.visible = true;
+                } else {
+                    mesh.visible = false;
+                }
+            } else {
+                // 標準 BVH/FBX 骨架處理
+                const parentPosition = bone.parent.getWorldPosition(new THREE.Vector3());
+                const childPosition = bone.getWorldPosition(new THREE.Vector3());
+                const direction = new THREE.Vector3().subVectors(childPosition, parentPosition);
+                const length = direction.length();
+                mesh.position.copy(parentPosition.clone().add(direction.multiplyScalar(0.5)));
+                mesh.quaternion.setFromUnitVectors(
+                    new THREE.Vector3(0, 1, 0),
+                    direction.clone().normalize()
+                );
+                mesh.scale.set(1, length / mesh.geometry.parameters.height, 1);
+            }
         });
         
         jointSpheres.forEach(({ bone, sphere }) => {
@@ -312,9 +404,13 @@ function animate({
             sphere.position.copy(pos);
         });
 
-        // 重心座標（用 Hips）
-        const hips = jointMapRef.current["hip"] ||jointMapRef.current["Hips"] || jointMapRef.current["mixamorigHips"] || jointMapRef.current["mixamorig:Hips"];
-        const neck = jointMapRef.current["neck"] || jointMapRef.current["Neck"] || jointMapRef.current["mixamorigNeck"] || jointMapRef.current["mixamorig:Neck"];
+        // 重心座標（支援不同格式）
+        const hips = jointMapRef.current["hip"] || jointMapRef.current["Hips"] || 
+                    jointMapRef.current["mixamorigHips"] || jointMapRef.current["mixamorig:Hips"] ||
+                    jointMapRef.current["left_hip"]; // landmark 格式
+        const neck = jointMapRef.current["neck"] || jointMapRef.current["Neck"] || 
+                    jointMapRef.current["mixamorigNeck"] || jointMapRef.current["mixamorig:Neck"] ||
+                    jointMapRef.current["nose"]; // landmark 格式（用 nose 代替 neck）
         if (hips) {
             const hipsPos = hips.getWorldPosition(new THREE.Vector3());
             const neckPos = neck.getWorldPosition(new THREE.Vector3());
