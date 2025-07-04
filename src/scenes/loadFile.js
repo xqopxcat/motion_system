@@ -6,71 +6,56 @@ import { createBoneMeshes, createJointSpheres, calculateBoundingBox } from './cr
 import { makeTextSprite } from "./modules";
 import { highlightSelectedJoint } from "../App";
 
-// 根據簡化的 15 個關節點重新定義連接關係
+// 您的 landmark_data.json 包含的 15 個關節點索引：[0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28, 31, 32]
+// 對應的連接關係（使用數組索引 0-14）
 const POSE_CONNECTIONS = [
-    // 上半身連線（使用新的索引）
-    [1, 2],   // left_shoulder - right_shoulder
-    [1, 3],   // left_shoulder - left_elbow  
-    [3, 5],   // left_elbow - left_wrist
-    [2, 4],   // right_shoulder - right_elbow
-    [4, 6],   // right_elbow - right_wrist
+    // 身體軀幹框架
+    [1, 2],   // left_shoulder(index 1) - right_shoulder(index 2)
+    [7, 8],   // left_hip(index 7) - right_hip(index 8) 
+    [1, 7],   // left_shoulder(index 1) - left_hip(index 7)
+    [2, 8],   // right_shoulder(index 2) - right_hip(index 8)
     
-    // 軀幹連線  
-    [1, 7],   // left_shoulder - left_hip
-    [2, 8],   // right_shoulder - right_hip
-    [7, 8],   // left_hip - right_hip
+    // 左手臂
+    [1, 3],   // left_shoulder(index 1) - left_elbow(index 3)
+    [3, 5],   // left_elbow(index 3) - left_wrist(index 5)
     
-    // 下半身連線
-    [7, 9],   // left_hip - left_knee
-    [9, 11],  // left_knee - left_ankle
-    [8, 10],  // right_hip - right_knee
-    [10, 12], // right_knee - right_ankle
+    // 右手臂  
+    [2, 4],   // right_shoulder(index 2) - right_elbow(index 4)
+    [4, 6],   // right_elbow(index 4) - right_wrist(index 6)
     
-    // 足部連線
-    [11, 13], // left_ankle - left_foot_index
-    [12, 14], // right_ankle - right_foot_index
+    // 左腿
+    [7, 9],   // left_hip(index 7) - left_knee(index 9)
+    [9, 11],  // left_knee(index 9) - left_ankle(index 11)
+    [11, 13], // left_ankle(index 11) - left_foot_index(index 13)
     
-    // 頭部連線
-    [0, 1],   // nose - left_shoulder (可選)
-    [0, 2],   // nose - right_shoulder (可選)
+    // 右腿
+    [8, 10],  // right_hip(index 8) - right_knee(index 10)  
+    [10, 12], // right_knee(index 10) - right_ankle(index 12)
+    [12, 14], // right_ankle(index 12) - right_foot_index(index 14)
+    
+    // 頭部到軀幹
+    [0, 1],   // nose(index 0) - left_shoulder(index 1)
+    [0, 2],   // nose(index 0) - right_shoulder(index 2)
 ];
 
+// 15 個關節點名稱（按照您數據中的順序）
 const JOINT_NAMES = [
-    'nose',              // 0
-    'left_shoulder',     // 1
-    'right_shoulder',    // 2
-    'left_elbow',        // 3
-    'right_elbow',       // 4
-    'left_wrist',        // 5
-    'right_wrist',       // 6
-    'left_hip',          // 7
-    'right_hip',         // 8
-    'left_knee',         // 9
-    'right_knee',        // 10
-    'left_ankle',        // 11
-    'right_ankle',       // 12
-    'left_foot_index',   // 13
-    'right_foot_index'   // 14
+    'nose',           // index 0 (MediaPipe index 0)
+    'left_shoulder',  // index 1 (MediaPipe index 11)
+    'right_shoulder', // index 2 (MediaPipe index 12)
+    'left_elbow',     // index 3 (MediaPipe index 13)
+    'right_elbow',    // index 4 (MediaPipe index 14)
+    'left_wrist',     // index 5 (MediaPipe index 15)
+    'right_wrist',    // index 6 (MediaPipe index 16)
+    'left_hip',       // index 7 (MediaPipe index 23)
+    'right_hip',      // index 8 (MediaPipe index 24)
+    'left_knee',      // index 9 (MediaPipe index 25)
+    'right_knee',     // index 10 (MediaPipe index 26)
+    'left_ankle',     // index 11 (MediaPipe index 27)
+    'right_ankle',    // index 12 (MediaPipe index 28)
+    'left_foot_index',// index 13 (MediaPipe index 31)
+    'right_foot_index'// index 14 (MediaPipe index 32)
 ];
-
-// MediaPipe 33個關節點到簡化15個關節點的映射
-const MEDIAPIPE_TO_SIMPLIFIED = {
-    0: 0,   // nose
-    11: 1,  // left_shoulder
-    12: 2,  // right_shoulder  
-    13: 3,  // left_elbow
-    14: 4,  // right_elbow
-    15: 5,  // left_wrist
-    16: 6,  // right_wrist
-    23: 7,  // left_hip
-    24: 8,  // right_hip
-    25: 9,  // left_knee
-    26: 10, // right_knee
-    27: 11, // left_ankle
-    28: 12, // right_ankle
-    31: 13, // left_foot_index
-    32: 14  // right_foot_index
-};
 
 export async function loadBVHAndInitSkeleton({
     bvhUrl,
@@ -329,12 +314,18 @@ export async function loadLandmarkAndInitSkeleton({
                 if (landmarkData.length > 0) {
                     const firstFrame = landmarkData[0];
                     updateBonePositions(bones, firstFrame.landmarks3D || firstFrame.landmarks2D);
+                    
+                    // 調試：輸出關鍵關節位置
+                    console.log('左肩位置 (index 1):', bones[1].position);
+                    console.log('右肩位置 (index 2):', bones[2].position); 
+                    console.log('左臀位置 (index 7):', bones[7].position);
+                    console.log('右臀位置 (index 8):', bones[8].position);
                 }
                 
                 // 設置關節列表
                 setJoints(JOINT_NAMES);
-                setSelectedJoint(JOINT_NAMES[1] || ''); // left_shoulder
-                setComparedJoint(JOINT_NAMES[2] || ''); // right_shoulder
+                setSelectedJoint(JOINT_NAMES[1]); // left_shoulder (index 1 in your data)
+                setComparedJoint(JOINT_NAMES[2]); // right_shoulder (index 2 in your data)
                 
                 // 創建視覺化
                 createLandmarkBoneMeshes(bones, POSE_CONNECTIONS, boneMeshes, skeletonGroup);
@@ -354,14 +345,13 @@ export async function loadLandmarkAndInitSkeleton({
                 // 預計算 hip 位置用於重心分析
                 landmarkData.forEach((frameData, frameIndex) => {
                     const landmarks = frameData.landmarks3D || frameData.landmarks2D;
-                    const leftHip = landmarks[7]; // left_hip index
-                    const rightHip = landmarks[8]; // right_hip index
-                    console.log('landmarks', landmarks, leftHip, rightHip);
+                    const leftHip = landmarks[7];  // left_hip (index 7 in your 15-point data)
+                    const rightHip = landmarks[8]; // right_hip (index 8 in your 15-point data)
                     if (leftHip && rightHip) {
                         const centerHip = new THREE.Vector3(
-                            (leftHip.x + rightHip.x) / 2,
-                            (leftHip.y + rightHip.y) / 2,
-                            (leftHip.z + rightHip.z) / 2
+                            (leftHip.x + rightHip.x) / 2 * 100, // 放大 + 平均
+                            -(leftHip.y + rightHip.y) / 2 * 100, // Y軸翻轉 + 放大 + 平均
+                            (leftHip.z + rightHip.z) / 2 * 100  // 放大 + 平均
                         );
                         hipsPositionsRef.current[frameIndex] = centerHip;
                     }
@@ -438,12 +428,13 @@ function onClick(event, renderer, camera, object, jointSpheres, setAnnotations, 
 
 // 更新骨骼位置
 function updateBonePositions(bones, landmarks) {
+    // 直接使用 MediaPipe 33 個關節點，不需要映射
     bones.forEach((bone, index) => {
         if (landmarks[index]) {
             const landmark = landmarks[index];
             bone.position.set(
                 landmark.x * 100, // 放大座標
-                -landmark.y * 100, // Y軸翻轉
+                -landmark.y * 100, // Y軸翻轉  
                 landmark.z * 100
             );
         }
@@ -500,9 +491,12 @@ function createLandmarkAnimationMixer(bones, landmarkData) {
 
 // 創建 Landmark 專用骨骼網格
 function createLandmarkBoneMeshes(bones, connections, boneMeshes, parent) {
-    connections.forEach(([startIndex, endIndex]) => {
+    console.log('創建骨架連線，總連接數:', connections.length);
+    connections.forEach(([startIndex, endIndex], i) => {
         const startBone = bones[startIndex];
         const endBone = bones[endIndex];
+        
+        console.log(`連接 ${i}: ${startIndex}(${startBone?.name}) -> ${endIndex}(${endBone?.name})`);
         
         if (startBone && endBone) {
             const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
@@ -515,6 +509,8 @@ function createLandmarkBoneMeshes(bones, connections, boneMeshes, parent) {
                 mesh 
             });
             parent.add(mesh);
+        } else {
+            console.warn(`連接失敗: startBone=${!!startBone}, endBone=${!!endBone}`);
         }
     });
 }
