@@ -372,7 +372,8 @@ export async function loadLandmarkAndInitSkeleton({
                         );
                     }
                 }
-                skeletonGroup.add([centerHipBone, chestBone]);
+                skeletonGroup.add(centerHipBone);
+                skeletonGroup.add(chestBone);
                 jointMapRef.current['center_hip'] = centerHipBone;
                 jointMapRef.current['chest'] = chestBone;
                 // 創建 nose 到 chest 的連線
