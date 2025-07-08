@@ -324,12 +324,6 @@ export async function loadLandmarkAndInitSkeleton({
                 if (landmarkData.length > 0) {
                     const firstFrame = landmarkData[0];
                     updateBonePositions(bones, firstFrame.landmarks3D || firstFrame.landmarks2D);
-                    
-                    // 調試：輸出關鍵關節位置
-                    console.log('左肩位置 (index 1):', bones[1].position);
-                    console.log('右肩位置 (index 2):', bones[2].position); 
-                    console.log('左臀位置 (index 7):', bones[7].position);
-                    console.log('右臀位置 (index 8):', bones[8].position);
                 }
                 
                 // 設置關節列表
@@ -350,50 +344,50 @@ export async function loadLandmarkAndInitSkeleton({
                 // 創建虛擬的 centerHip 骨骼並加入到 jointMapRef
                 const centerHipBone = new THREE.Bone();
                 centerHipBone.name = 'center_hip';
+                // 創建虛擬的 chest 骨骼並加入到 jointMapRef
+                const chestBone = new THREE.Bone();
+                chestBone.name = 'chest';
                 // 設置初始位置為 leftHip 和 rightHip 的中點
                 if (landmarkData.length > 0) {
                     const firstFrame = landmarkData[0];
                     const landmarks = firstFrame.landmarks3D || firstFrame.landmarks2D;
+                    const minHeelY = Math.max(landmarks[15].y, landmarks[16].y);
+                    const yOffset = minHeelY * 100;
                     const leftHip = landmarks[7];
                     const rightHip = landmarks[8];
+                    const leftShoulder = landmarks[1];
+                    const rightShoulder = landmarks[2];
                     if (leftHip && rightHip) {
                         centerHipBone.position.set(
                             (leftHip.x + rightHip.x) / 2 * 100,
-                            -(leftHip.y + rightHip.y) / 2 * 100,
+                            (-(leftHip.y + rightHip.y) / 2 * 100) + yOffset,
                             (leftHip.z + rightHip.z) / 2 * 100
                         );
                     }
-                }
-                skeletonGroup.add(centerHipBone);
-                jointMapRef.current['center_hip'] = centerHipBone;
-                
-                // 創建虛擬的 chest 骨骼並加入到 jointMapRef
-                const chestBone = new THREE.Bone();
-                chestBone.name = 'chest';
-                // 設置初始位置為 leftShoulder 和 rightShoulder 的中點
-                if (landmarkData.length > 0) {
-                    const firstFrame = landmarkData[0];
-                    const landmarks = firstFrame.landmarks3D || firstFrame.landmarks2D;
-                    const leftShoulder = landmarks[1];
-                    const rightShoulder = landmarks[2];
                     if (leftShoulder && rightShoulder) {
                         chestBone.position.set(
                             (leftShoulder.x + rightShoulder.x) / 2 * 100,
-                            -(leftShoulder.y + rightShoulder.y) / 2 * 100,
+                            (-(leftShoulder.y + rightShoulder.y) / 2 * 100) + yOffset,
                             (leftShoulder.z + rightShoulder.z) / 2 * 100
                         );
                     }
                 }
-                skeletonGroup.add(chestBone);
+                skeletonGroup.add([centerHipBone, chestBone]);
+                jointMapRef.current['center_hip'] = centerHipBone;
                 jointMapRef.current['chest'] = chestBone;
-                
                 // 創建 nose 到 chest 的連線
                 createNoseToChestConnection(bones[0], chestBone, boneMeshes, skeletonGroup);
                 
                 // 更新關節列表，加入 center_hip 和 chest
                 const updatedJointNames = [...JOINT_NAMES, 'center_hip', 'chest'];
                 setJoints(updatedJointNames);
-                
+                jointSpheres.push({
+                    bone: centerHipBone,
+                    sphere: centerHipSphere
+                }, {
+                    bone: chestBone,
+                    sphere: chestSphere
+                });
                 // 點擊事件
                 renderer.domElement.addEventListener('click', e => 
                     onClick(e, renderer, camera, skeletonGroup, jointSpheres, setAnnotations, frameRef)
@@ -407,12 +401,14 @@ export async function loadLandmarkAndInitSkeleton({
                 // 預計算 hip 位置用於重心分析
                 landmarkData.forEach((frameData, frameIndex) => {
                     const landmarks = frameData.landmarks3D || frameData.landmarks2D;
+                    const minHeelY = Math.max(landmarks[15].y, landmarks[16].y);
+                    const yOffset = minHeelY * 100;
                     const leftHip = landmarks[7];  // left_hip (index 7 in your 15-point data)
                     const rightHip = landmarks[8]; // right_hip (index 8 in your 15-point data)
                     if (leftHip && rightHip) {
                         const centerHip = new THREE.Vector3(
                             (leftHip.x + rightHip.x) / 2 * 100, // 放大 + 平均
-                            -(leftHip.y + rightHip.y) / 2 * 100, // Y軸翻轉 + 放大 + 平均
+                            (-(leftHip.y + rightHip.y) / 2 * 100) + yOffset, // Y軸翻轉 + 放大 + 平均
                             (leftHip.z + rightHip.z) / 2 * 100  // 放大 + 平均
                         );
                         hipsPositionsRef.current[frameIndex] = centerHip;
@@ -494,29 +490,47 @@ function onClick(event, renderer, camera, object, jointSpheres, setAnnotations, 
 
 // 更新骨骼位置
 function updateBonePositions(bones, landmarks) {
-    // 直接使用 MediaPipe 33 個關節點，不需要映射
+    // 找出腳跟的最低 Y 點作為地面參考
+    let minHeelY = Math.max(landmarks[15].y, landmarks[16].y);
+    
+    // 計算 Y 軸偏移量，使最低的腳跟點對應到 Three.js 的 y=0（地面）
+    const yOffset = minHeelY * 100;
+    
+    // 直接使用 MediaPipe 17 個關節點
     bones.forEach((bone, index) => {
         if (landmarks[index]) {
             const landmark = landmarks[index];
             bone.position.set(
-                landmark.x * 100, // 放大座標
-                -landmark.y * 100, // Y軸翻轉  
-                landmark.z * 100
+                (landmark.x) * 100, // X軸：以 0.5 為中心，轉換為 Three.js 座標
+                (-landmark.y * 100) + yOffset, // Y軸：翻轉並加上偏移量使腳跟貼地
+                landmark.z * 100 // Z軸：保持原樣
             );
         }
     });
 }
 
 // 更新 centerHip 骨骼位置
-function updateCenterHipBone(centerHipBone, landmarks) {
+function updateCenterHipBone(centerHipBone, landmarks, centerHipSphere = null) {
     const leftHip = landmarks[7];  // left_hip (index 7)
     const rightHip = landmarks[8]; // right_hip (index 8)
     
     if (leftHip && rightHip) {
+        // 找出腳跟的最低 Y 點作為地面參考
+        let minHeelY = Math.max(landmarks[15].y, landmarks[16].y);
+        
+        const yOffset = minHeelY * 100;
+        
+        const centerHipPosition = {
+            x: ((leftHip.x + rightHip.x) / 2) * 100,
+            y: (-(leftHip.y + rightHip.y) / 2 * 100) + yOffset,
+            z: (leftHip.z + rightHip.z) / 2 * 100
+        };
+        
+        // 更新 centerHipBone 位置
         centerHipBone.position.set(
-            (leftHip.x + rightHip.x) / 2 * 100, // 放大 + 平均
-            -(leftHip.y + rightHip.y) / 2 * 100, // Y軸翻轉 + 放大 + 平均
-            (leftHip.z + rightHip.z) / 2 * 100  // 放大 + 平均
+            centerHipPosition.x,
+            centerHipPosition.y,
+            centerHipPosition.z
         );
     }
 }
@@ -527,10 +541,15 @@ function updateChestBone(chestBone, landmarks) {
     const rightShoulder = landmarks[2]; // right_shoulder (index 2)
     
     if (leftShoulder && rightShoulder) {
+        // 找出腳跟的最低 Y 點作為地面參考
+        let minHeelY = Math.max(landmarks[15].y, landmarks[16].y);
+        // 計算 Y 軸偏移量，使最低的腳跟點對應到 Three.js 的 y=0（地面）
+        const yOffset = minHeelY * 100;
+        
         chestBone.position.set(
-            (leftShoulder.x + rightShoulder.x) / 2 * 100, // 放大 + 平均
-            -(leftShoulder.y + rightShoulder.y) / 2 * 100, // Y軸翻轉 + 放大 + 平均
-            (leftShoulder.z + rightShoulder.z) / 2 * 100  // 放大 + 平均
+            ((leftShoulder.x + rightShoulder.x) / 2) * 100, // X軸：以 0.5 為中心
+            (-(leftShoulder.y + rightShoulder.y) / 2 * 100) + yOffset, // Y軸：翻轉並加上偏移量
+            (leftShoulder.z + rightShoulder.z) / 2 * 100  // Z軸：保持原樣
         );
     }
 }
@@ -603,12 +622,10 @@ function createLandmarkAnimationMixer(bones, landmarkData, centerHipBone, chestB
 
 // 創建 Landmark 專用骨骼網格
 function createLandmarkBoneMeshes(bones, connections, boneMeshes, parent) {
-    console.log('創建骨架連線，總連接數:', connections.length);
     connections.forEach(([startIndex, endIndex], i) => {
         const startBone = bones[startIndex];
         const endBone = bones[endIndex];
         
-        console.log(`連接 ${i}: ${startIndex}(${startBone?.name}) -> ${endIndex}(${endBone?.name})`);
         
         if (startBone && endBone) {
             const geometry = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
@@ -643,7 +660,7 @@ function createLandmarkJointSpheres(bones, jointSpheres, parent) {
 function createCenterHipSphere(parent) {
     const geometry = new THREE.SphereGeometry(2.5, 16, 16); // 比普通關節稍大
     const material = new THREE.MeshBasicMaterial({ 
-        color: 0x00ffff,
+        color: 0x0000ff,
         transparent: true,
         opacity: 0.8
     });
@@ -657,7 +674,7 @@ function createCenterHipSphere(parent) {
 function createChestSphere(parent) {
     const geometry = new THREE.SphereGeometry(2.5, 16, 16); // 比普通關節稍大
     const material = new THREE.MeshBasicMaterial({ 
-        color: 0x00ffff, // 青色以區別於其他關節
+        color: 0xffffff, // 青色以區別於其他關節
         transparent: true,
         opacity: 0.8
     });
@@ -679,6 +696,4 @@ function createNoseToChestConnection(noseBone, chestBone, boneMeshes, parent) {
         mesh 
     });
     parent.add(mesh);
-    
-    console.log('創建 nose 到 chest 連線');
 }
